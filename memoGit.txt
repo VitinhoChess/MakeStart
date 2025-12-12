@@ -1,0 +1,5 @@
+~~~~~~~~~~~~~~~ Mémo Git ~~~~~~~~~~~~~~~
+
+git add .
+git commit -m "meesage"
+git push
