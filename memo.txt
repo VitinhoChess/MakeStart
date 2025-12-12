@@ -1,0 +1,22 @@
+---------------DEBUT DU MEMO---------------
+echo "Texte" > fichier.txt      // Écrit du texte (écrase le contenu précédent)
+echo "Texte" >> fichier.txt     // Ajoute du texte à la fin du fichier
+cat > fichier.txt               // Permet de saisir plusieurs lignes (Ctrl + D pour finir)
+nano fichier.txt                // Ouvre le fichier dans l’éditeur nano
+vim fichier.txt                 // Ouvre le fichier dans l’éditeur vim
+
+cat fichier.txt                 // Affiche tout le fichier
+more fichier.txt                // Affiche page par page
+less fichier.txt                // Affiche avec navigation (flèches, q pour quitter)
+head fichier.txt                // Affiche les 10 premières lignes
+head -n 5 fichier.txt           // Affiche les 5 premières lignes
+tail fichier.txt                // Affiche les 10 dernières lignes
+tail -n 5 fichier.txt           // Affiche les 5 dernières lignes
+tail -f fichier.txt             // Suivi en temps réel du fichier
+
+grep "mot" fichier.txt          // Recherche un mot et affiche les lignes correspondantes
+grep -i "mot" fichier.txt       // Même chose, insensible à la casse
+grep -n "mot" fichier.txt       // Affiche aussi le numéro de ligne
+grep -r "mot" /chemin/dossier   // Recherche récursive dans un dossier
+---------------FIN DU MEMO---------------
+sed -i '' fichier.txt     //Supprime la dernière ligne

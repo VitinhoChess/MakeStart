@@ -1,0 +1,15 @@
+Liste de fonctions à implementer dans le code source du Jeu :
+
+* : facultatif, ** : intéressant, *** : important
+1 : passer à 3 frames d'animation pour crocodilo et tralalero : *
+2 : ajuster la taille des sprites en fonction de la taille de la fênetre : ***
+3 : améliorer le menu : **
+4 : corriger sprite tralalero (imparfait) : **
+5 : ameliorer oscillations crocodilo : **
+6 : ajouter musique au menu : **
+7 : bug crocodilo : ***
+8 : ajouter animation 2/3 frames missile : *
+9 : améliorer la barre de vie : **
+10 : ajuster les hitbox des missiles : **
+11 : rendre les missiles esquivables et fun : ***
+12 : ajouter high score permanant : **

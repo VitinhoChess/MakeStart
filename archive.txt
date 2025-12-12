@@ -1,0 +1,1027 @@
+main.cpp : 
+#include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
+#include <iostream>
+#include <random>
+#include <vector>
+#include "character.hpp"
+#include "menus.hpp"
+#include "crocodilo.hpp"
+#include "missile.hpp"
+
+// enum des differents "menus" nom formel = states
+enum class GameState 
+	{
+		MENU,
+		GAME,
+		PAUSE
+	};
+
+int main()  
+      
+      {
+      
+            // Crée une fenêtre de 800x600 pixels
+            sf::RenderWindow window(sf::VideoMode(800, 600), "fenetre");
+
+            // horloge
+            sf::Clock clock;
+
+		// Mettre le menu en premier
+		GameState state = GameState::MENU;
+
+		// creation du menu
+		Menu menu(window);
+
+            // créer character : appel au contructeur
+		// start de player
+		float xStart = 400.f;
+		float yStart = 600.f;
+            character player("graphismes/tralalero.png", "graphismes/tralaleroW.png", xStart, yStart); // set position ici = pb
+
+		// créer crocodilo : appel constructeur
+		crocodilo bot("graphismes/crocodiloV2.png", 120.f, 60.f, 740.f, 120.f);
+		bot.setOscillation(5.f, 1.f);
+		bot.setTurbulence(4.f, 1.5f);
+
+		// MISSILES
+		//texture
+		// mettre dans une fonction qu'on appelle ?
+		sf::Texture texMissile; // def ici pour eviter de load plein de fois
+		sf::Texture texExpl0;
+		sf::Texture texExpl1;
+		sf::Texture texExpl2;
+		if(!texMissile.loadFromFile("graphismes/missilePixel.png"))
+			std::cerr << "erreur load missile\n";
+		if(!texExpl0.loadFromFile("graphismes/boom1pixel.png"))
+			std::cerr << "erreur load explosion 1\n";
+		if(!texExpl1.loadFromFile("graphismes/boom2pixel.png"))
+			std::cerr << "erreur load explosion 2\n";
+		if(!texExpl2.loadFromFile("graphismes/boom3pixel.png"))
+			std::cerr << "erreur load explosion 3\n";
+		
+		std::vector<missile> missiles; // conteneur dynamique
+		sf::Clock missileClock; // clock missile
+		float nextShot = 5.f; // timer de tir
+		auto randAngle = []() // lambda
+			{
+				static std::mt19937 rng{std::random_device{}()}; // rng deluxe
+				std::uniform_real_distribution<float> distribution(90.f - 40.f, 90.f + 40.f); //distribution aléatoire
+				return distribution(rng);
+			};
+
+// ----------BOUCLE PRINCIPALE----------
+            while(window.isOpen()) 
+                  {
+                        sf::Event event; // var event de type Event
+                        while(window.pollEvent(event)) // liste des événements
+                              {
+                                    if(event.type == sf::Event::Closed)
+                                          window.close();
+                                    
+                                    if(event.type == sf::Event::KeyPressed)
+                                          {
+                                                if(event.key.code == sf::Keyboard::Q)
+                                                      window.close();
+								if(event.key.code == sf::Keyboard::P) 
+									{
+										if(state == GameState::GAME)
+											state = GameState::PAUSE;
+										else if(state == GameState::PAUSE) 
+											{
+												state = GameState::GAME;
+												clock.restart();
+											}
+									}
+                                          }
+						if(state == GameState::MENU) 
+							{
+								menu.handleEvent(event);
+							}
+
+                              }
+
+				if(state == GameState::MENU) 
+					{
+						if(menu.wantsToStartGame())
+							{
+								// initialisation
+								state = GameState::GAME;
+								clock.restart();
+								player.resetHealth();
+								missiles.clear(); // doublon sécurité (déjà dans le if(isDead))
+								menu.setStartGameFalse(); // 
+								
+							}
+						menu.update();
+						menu.draw();
+					}
+				else if (state == GameState::GAME) 
+					{
+						
+				
+		                        // calcul delta temps en s
+		                        float dt = clock.restart().asSeconds();
+		
+	// ----- appel fonction déplacements -----        
+						player.handleInput(dt); // pas d'input pour le bot (logique)
+		
+		                        // updates
+		                        player.update(dt);
+						player.clampToWindow(window);
+		                        bot.update(dt);
+						bot.clampToWindow(window);
+
+						// tir auto crocodilo
+						if(missileClock.getElapsedTime().asSeconds() >= nextShot) 
+							{
+								missileClock.restart();
+								const float angle = randAngle(); // appel angle aléatoire
+								const float speed = 300.f;
+								
+								missiles.emplace_back(texMissile);
+								missiles.back().setExplosionTexture(&texExpl0, &texExpl1, &texExpl2);;
+								missiles.back().launch(bot.getPosition(), speed, angle);
+								
+							}
+						// maj missiles
+						for(auto& m : missiles)
+							{
+								m.update(dt, window);
+								if(m.getHitbox().intersects(player.getHitbox()))  // detection colision missile / joueur
+									{
+										std::cout << "touché !\n";
+										m.markHasHit();
+										m.triggerExplosion();
+										player.takeDammage(m.getDammage());
+
+										// gestion mort player
+										if(player.isDead()) 
+											{
+												std::cout << "GAME OVER\n";
+												state = GameState::MENU;
+												player.resetHealth();
+												missiles.clear();
+												player.setPosition(xStart, yStart);
+											}
+									}
+							}
+						// suppresion missiles morts if(m_alive = false)
+						missiles.erase(std::remove_if(missiles.begin(), missiles.end(), [](const missile& m){return !m.isAlive();}), missiles.end());
+						
+		                        window.clear(sf::Color::Black); // clear après les updates. Changer la couleur du fond ici
+		                        player.draw(window);
+						player.drawHealthBar(window);
+
+						for (const auto& m : missiles)
+							m.draw(window);
+		                        bot.draw(window);
+						
+						/* AFFICHER LES HITBOX
+						player.drawHitbox(window, sf::Color::Green);
+						for(const auto& m : missiles)
+							m.drawHitbox(window, sf::Color::Red);
+						*/
+						
+						// dernier
+		                        window.display();
+					}
+				else if(state == GameState::PAUSE) 
+					{
+						window.clear(sf::Color::Black);
+						// redessiner la dernière scène
+						player.draw(window);
+						for(const auto& m : missiles) 
+							m.draw(window);
+						bot.draw(window);
+						drawPauseMenu(window);
+
+						window.display();
+					}
+                        
+                  }
+// ----------FIN BOUCLE PRINCIPALE----------
+
+            return 0;
+      }
+missile.hpp :
+#ifndef MISSILE_HPP
+#define MISSILE_HPP
+
+#include <SFML/Graphics.hpp> 
+#include <SFML/Audio.hpp> 
+#include <string>
+
+class missile 
+	{
+		public:
+			explicit missile(const sf::Texture& texture);
+			void launch(sf::Vector2f startPos, float speed, float angleDeg);
+			void update(float dt, const sf::RenderWindow& window);
+			void draw(sf::RenderWindow& window) const;
+			bool isAlive() const {return m_alive;}
+			bool intersects(const sf::FloatRect& other) const;
+			void invertAlive();
+			void setExplosionTexture(const sf::Texture* t0, const sf::Texture* t1, const sf::Texture* t2) 
+				{
+					m_expl[0] = t0; m_expl[1] = t1; m_expl[2] = t2;
+				}
+			void triggerExplosion();
+			missile(missile&&) noexcept = default;
+			missile& operator=(missile&&) noexcept = default;
+			missile(const missile&) = delete;
+			missile& operator=(const missile&) = delete;
+			// hitbox
+			sf::FloatRect getHitbox() const;
+			void drawHitbox(sf::RenderWindow& window, sf::Color color = sf::Color::Red) const;
+			void setHitboxSize(sf::Vector2f s) {m_hitboxSize = s;}
+			void setHitboxOffset(sf::Vector2f o) {m_hitboxOffset = o;}
+			// dégats
+			float getDammage() const {return m_damage;}
+			void setDammage(float d) {m_damage = d;}
+			bool canTakeDamage() const {return m_alive && !m_hasHit;}
+			void markHasHit() {m_hasHit = true;}
+
+		private:
+			const sf::Texture* m_tex = nullptr;
+			sf::Sprite m_sprite;
+			sf::Vector2f m_vel; // vitesse en x et y
+			bool m_alive = false;
+			bool m_exploding = false;
+			int m_explIndex = 0;
+			float m_explTimer = 0.f;
+			float m_explFrameDt = 0.3f; // ms par frame
+			const sf::Texture* m_expl[3] = {nullptr, nullptr, nullptr};
+			static float deg2grad(float d) {return d * 3.1415926535f / 180.f;} // conversion maths
+			void applyTextureKeepCenter(const sf::Texture& tex);
+			sf::SoundBuffer m_explBuffer; // données du son
+			sf::Sound m_explSound; // joue le son
+			//hit box
+			sf::Vector2f m_hitboxSize = {30.f, 80.f};
+			sf::Vector2f m_hitboxOffset = {0.f, 0.f};
+			// dégats
+			float m_damage = 50.f;
+			bool m_hasHit = false;
+
+	};
+
+#endif
+missile.cpp:
+#include "missile.hpp"
+#include <cmath>
+#include <iostream>
+
+
+
+
+// constructeur
+
+missile::missile(const sf::Texture& texture)
+: m_tex(&texture), m_sprite(texture)
+	{
+		sf::FloatRect b = m_sprite.getLocalBounds();
+		m_sprite.setOrigin(b.width/2.f, b.height/2.f); // centrer l'origine
+		m_sprite.setScale(0.1f, 0.1f); // taille du sprite
+	}
+
+void missile::applyTextureKeepCenter(const sf::Texture& tex) 
+	{
+		sf::Vector2f pos = m_sprite.getPosition();
+		sf::Vector2f scl = m_sprite.getScale();
+		m_sprite.setTexture(tex, true);
+		sf::FloatRect b = m_sprite.getLocalBounds();
+		m_sprite.setOrigin(b.width/2.f, b.height/2.f);
+		m_sprite.setScale(scl);
+		m_sprite.setPosition(pos);
+	}
+
+void missile::launch(sf::Vector2f startPos, float speed, float angleDeg) 
+	{
+		// declare le missile comme alive, lui calcule sa vitesse x et y, initialise sa pos et sa rotation
+		const float angle = deg2grad(angleDeg);
+
+		// calcul vitesse (maths)
+		m_vel.x = std::cos(angle) * speed;
+		m_vel.y = std::sin(angle) * speed;
+
+		m_sprite.setPosition(startPos);
+		m_sprite.setRotation(angleDeg); // gerer l'orientation du sprite ici
+
+		m_exploding = false;
+		m_explIndex = 0;
+		m_explTimer = 0.f;
+
+		m_alive = true;
+		m_hasHit = false;
+	}
+
+void missile::triggerExplosion() 
+	{
+		
+		if(!m_alive || m_exploding)
+			return; // deja mort ou en explosion
+		
+		m_hasHit = true;
+		m_exploding = true;
+		m_explIndex = 0; // remettre les coefficients à zero
+		m_explTimer = 0.f;
+		m_vel = {0.f, 0.f}; // arreter la vitesse
+
+		// SON
+		if(!m_explBuffer.loadFromFile("graphismes/explosion8bits.wav"))
+			std::cerr << "erreur load explosion8bits.wav" << std::endl;
+		m_explSound.setBuffer(m_explBuffer);
+		m_explSound.setVolume(100.f); // volume son 0 à 100
+		m_explSound.setPitch(1.f); // aigu (fréquence et durée) 0.5 grave, 2.0 aigu
+		m_explSound.play();
+
+		// visuel
+		m_sprite.setRotation(0);
+		applyTextureKeepCenter(*m_expl[0]);
+		m_sprite.setScale(0.5f, 0.5f); // set scale des explosions ici
+
+
+	}
+
+void missile::update(float dt, const sf::RenderWindow& window) 
+	{
+		if(!m_alive)
+			return;
+
+		if(m_exploding) // animation 3 frames
+			{
+				m_explTimer += dt;
+				if(m_explTimer >= m_explFrameDt) 
+					{
+						m_explTimer = 0.f;
+						++m_explIndex;
+
+						if(m_explIndex < 3 && m_expl[m_explIndex]) // double sécurité ? 
+							{
+								applyTextureKeepCenter(*m_expl[m_explIndex]);
+							}
+						else 
+							{
+								m_alive = false;
+							}
+					}
+				return;
+			}
+
+		// bouger
+		m_sprite.move(m_vel *dt);
+
+		// rebonds murs g&d
+		// calcul des vmin et vmax du sprite
+		const float halfW = m_sprite.getGlobalBounds().width * 0.5f; 
+		const float minX = halfW;
+		const float maxX = static_cast<float>(window.getSize().x) - halfW; // conversion int to float
+
+		// inversion vitesse en x si bords dépassés
+		sf::Vector2f pos = m_sprite.getPosition();
+		if(pos.x < minX) {pos.x = minX; m_vel.x = -m_vel.x; m_sprite.setPosition(pos);}
+		if(pos.x > maxX) {pos.x = maxX; m_vel.x = -m_vel.x; m_sprite.setPosition(pos);}
+
+		// ajuster l'angle du sprite. Pas obligé si vitesse et trajectoire constante
+		if(std::abs(m_vel.x) + std::abs(m_vel.y) > 0.001f) 
+			{
+				float a = std::atan2(m_vel.y, m_vel.x) * 180.f / 3.1415926535f;
+				m_sprite.setRotation(a);
+			}
+		
+		// coord du sol
+		const float halfH = m_sprite.getGlobalBounds().height * 0.5f;
+		const float maxY = static_cast<float>(window.getSize().y) - halfH;
+
+		// déclenche le missile si sol est atteint (maxY) 
+		if(m_sprite.getPosition().y >= maxY) 
+			{
+				triggerExplosion();
+				//m_alive = false;
+			}
+
+// ----- fin upadte() -----		
+	}
+
+sf::FloatRect missile::getHitbox() const 
+	{
+		sf::Vector2f pos = m_sprite.getPosition();
+		float left = pos.x - m_hitboxSize.x / 2.f + m_hitboxOffset.x;
+		float top = pos.y - m_hitboxSize.y / 2.f + m_hitboxOffset.y;
+
+		return {left, top, m_hitboxSize.x, m_hitboxSize.y};
+	}
+
+void missile::drawHitbox(sf::RenderWindow& window, sf::Color color) const 
+	{
+		if(!m_alive)
+			return;
+		sf::FloatRect hb = getHitbox();
+		sf::RectangleShape r;
+		r.setPosition(hb.left, hb.top);
+		r.setSize({hb.width, hb.height});
+		r.setFillColor(sf::Color::Transparent);
+		r.setOutlineColor(color);
+		r.setOutlineThickness(1.f);
+		window.draw(r);
+	}
+
+void missile::draw(sf::RenderWindow& window) const 
+	{
+		if(m_alive)
+			window.draw(m_sprite);
+	}
+
+bool missile::intersects(const sf::FloatRect& other) const 
+	{
+		return m_alive && m_sprite.getGlobalBounds().intersects(other);
+	}
+
+void missile::invertAlive() 
+	{
+		m_alive = !m_alive;
+	}
+crocodilo.hpp :
+#ifndef CROCODILO_HPP
+#define CROCODILO_HPP
+
+#include <SFML/Graphics.hpp>
+#include <string>
+
+
+class crocodilo  // nom de classe type ia
+	{
+		public:
+		crocodilo(const std::string& texturePath, float y, float leftX, float rightX, float speed); // constructeur
+
+		void update(float dt);
+		void clampToWindow(const sf::RenderWindow&);
+		void draw(sf::RenderWindow& window) const;
+
+		sf::Vector2f getPosition() const {return m_spriteCro.getPosition();}
+		sf::FloatRect getBounds() const {return m_spriteCro.getGlobalBounds();}
+
+		void setSpeed(float s) {m_speed = s;}
+		void setPatrol(float leftX, float rightX) {m_leftX = leftX; m_rightX = rightX;}
+
+		void setOscillation(float amp, float freq) {m_oscAmp = amp; m_oscFreq = freq;}
+		void setTurbulence(float amp, float freq) {m_turbAmp = amp; m_turbFreq = freq;}
+
+		private:
+		sf::Texture m_textureCro;
+		sf::Sprite m_spriteCro;
+
+		float m_leftX;
+		float m_rightX;
+		float m_speed;
+		float m_altitude;
+		float m_size = 0.3f;
+		int m_dir = -1;
+
+		float m_oscAmp;
+		float m_oscFreq;
+		float m_turbAmp;
+		float m_turbFreq;
+		float m_time;
+	};
+
+#endif
+crocodilo.cpp:
+#include "crocodilo.hpp"
+#include <iostream>
+#include <algorithm>
+#include <cmath>
+
+// constructeur : initialiser crocodilo
+crocodilo::crocodilo(const std::string& texturePath, float y, float leftX, float rightX, float speed)
+	{
+		m_leftX = leftX;
+		m_rightX = rightX;
+		m_speed = speed;
+		m_altitude = y;
+
+		 if(!m_textureCro.loadFromFile(texturePath)) 
+                  std::cerr << "erreur load from file crocodilo" << texturePath << std::endl;
+		m_spriteCro.setTexture(m_textureCro);
+
+		// centrer l'origine pour les flips
+		const sf::FloatRect b = m_spriteCro.getLocalBounds();
+		m_spriteCro.setOrigin(b.width/2.f, b.height/2.f);
+
+		// taille et position initiale
+		m_spriteCro.setPosition(m_leftX, m_altitude);
+		m_spriteCro.setScale(m_size, m_size);
+	}
+
+void crocodilo::update(float dt) 
+	{
+
+		m_time += dt;
+		
+		// deplacement horizontal
+		sf::Vector2f pos = m_spriteCro.getPosition();
+		pos.x += m_dir * m_speed * dt;
+
+		// rebonds dans la zone de patrouille
+		if(pos.x <= m_leftX){pos.x = m_leftX; m_dir = 1;}
+		if(pos.x >= m_rightX){pos.x = m_rightX; m_dir = -1;}
+
+		// oscillations et turbulences
+		const float deuxPi = 6.28318530718f;
+		float osc = m_oscAmp * std::sin(deuxPi * m_turbFreq * m_time + 1.234f);
+
+		float turb = m_turbAmp
+			* std::sin(deuxPi * m_turbFreq * m_time + 1.234f)
+			*std::sin(deuxPi * m_turbFreq * 0.37f * m_time + 4.321f);
+		float yFinal = m_altitude + osc + turb; // altitude finale apres perturbations
+
+		// flip visuel selon direction
+		m_spriteCro.setScale(m_dir > 0 ? -m_size : m_size, m_size);
+
+		// update la position en x et y
+		m_spriteCro.setPosition(pos.x, yFinal);
+	}
+
+void crocodilo::clampToWindow(const sf::RenderWindow& window) 
+	{
+		// empecher toute sortie de l'écran
+		const sf::FloatRect gb = m_spriteCro.getGlobalBounds();
+		const float halfW = gb.width / 2.f;
+
+		const float minX = halfW;
+		const float maxX = window.getSize().x - halfW;
+
+		// ajuste patrouille si nécessaire
+		if(m_leftX < minX) m_leftX = minX;
+		if(m_rightX > maxX) m_rightX = maxX;
+
+		sf::Vector2f pos = m_spriteCro.getPosition();
+		if(pos.x < minX) {pos.x = minX; m_dir = -1;}
+		if(pos.x > maxX) {pos.x = maxX; m_dir = +1;}
+
+		m_spriteCro.setPosition(pos.x, pos.y);
+	}
+
+void crocodilo::draw(sf::RenderWindow& window) const 
+	{
+		window.draw(m_spriteCro);
+	}
+character.hpp :
+#ifndef CHARACTER_HPP
+#define CHARACTER_HPP
+
+#include <SFML/Graphics.hpp> 
+#include <SFML/Audio.hpp> 
+#include <string>
+#include <algorithm>
+
+class character 
+      {
+            public:
+
+			// constructeur, fonction appelée quand on déclare un character
+                  character(const std::string& texturePath, const std::string& texturePathWalk, float startX, float startY);
+
+			// méthodes
+                  void update(float dt);
+                  void move(float dx, float dy);
+                  void draw(sf::RenderWindow& window);
+			void handleInput(float dt);
+			void clampToWindow(const sf::RenderWindow& window);
+                  sf::FloatRect getBounds() const;
+			void setPosition(float x, float y);
+			// hitbox
+			sf::FloatRect getHitbox() const;
+			void drawHitbox(sf::RenderWindow& window, sf::Color color =sf::Color::Green) const;
+			void setHitboxSize(sf::Vector2f size) {m_hitboxSize = size;}
+			void setHitboxOffset(sf::Vector2f offs) {m_hitboxOffset = offs;} 
+			// pdv
+			void setHealth(float pv) {m_pv = std::clamp(pv, 0.f, m_pvMax);}
+			float getHealth() const {return m_pv;}
+			float getMaxHealth() const {return m_pv;}
+			void takeDammage(float amount);
+			bool isDead() const {return m_pv >= 0.f;}
+			float getHealthRatio() const {return (m_pv >= 0.f ) ? (m_pv / m_pvMax) : 0.f;}
+			void resetHealth() {m_pv = m_pvMax;}
+			void setupHealthBar(const sf::Vector2f& pos, const sf::Vector2f& size);
+			void drawHealthBar(sf::RenderWindow& window) const;
+
+            private:
+			// textures animation
+                  sf::Texture m_texture;
+			sf::Texture m_textureW;
+
+                  sf::Sprite m_sprite;
+
+			// variables d'animation de marche
+			bool m_isMoving = false;
+			bool m_useAltFrame = false;
+			bool m_justStartedMoving = false;
+			float m_animTimer = 0.f;
+
+			// variable de taille (affichage)
+			float m_size = 0.72f;
+
+			// variables de saut
+			float m_velocityY = 0.f;
+			float m_jumpTimer = 0.f;
+			bool m_isOnGround = false;
+			const float m_gravity = 800.f;
+
+			// variables audio
+			sf::SoundBuffer m_jumpBuffer; // données du son
+			sf::Sound m_jumpSound; // joue le son
+
+			// hitbox
+			sf::Vector2f m_hitboxSize = {110.f, 75.f}; // taille hitbox
+			sf::Vector2f m_hitboxOffset = {0.f, 0.f}; // décalage facultatif
+
+			// pv
+			float m_pv = 100.f;
+			float m_pvMax = 100.f;
+			// parametres barre de vie
+			sf::Vector2f m_pvBarPos = {20.f, 20.f};
+			sf::Vector2f m_pvBarSize = {200.f, 20.f};
+			sf::Color m_pvBackColor = sf::Color::White;
+			sf::Color m_pvFrontColor = sf::Color::Red;
+			
+			
+      };
+
+#endif
+character.cpp :
+#include "character.hpp"
+#include <iostream>
+
+
+
+// CONSTRUCTEUR -- INITIALISE TRALALERO
+character::character(const std::string& texturePath, const std::string& texturePathWalk, float startX, float startY) 
+      {
+// VISUEL - charger les textures
+            if(!m_texture.loadFromFile(texturePath)) 
+                  std::cerr << "erreur load from file idle" << texturePath << std::endl;
+		if(!m_textureW.loadFromFile(texturePathWalk)) 
+                  std::cerr << "erreur load from file walk" << texturePathWalk << std::endl;
+		
+            // besoin de set ici sinon pb avec setOrigin
+            m_sprite.setTexture(m_texture);
+
+		// mettre l'axe de pivotement au centre
+		sf::FloatRect bounds = m_sprite.getLocalBounds(); // bounds = boite invisible
+		m_sprite.setOrigin(bounds.width / 2.f, bounds.height / 2.f);
+		m_sprite.setScale(-m_size, m_size); // note : '-' pour orientation de départ vers la droite
+		
+            m_sprite.setPosition(startX, startY);
+// FIN VISUEL
+		
+// AUDIO
+		if(!m_jumpBuffer.loadFromFile("graphismes/jump8bits.wav"))
+			std::cerr << "erreur load jump8bits.wav" << std::endl;
+		m_jumpSound.setBuffer(m_jumpBuffer);
+		m_jumpSound.setVolume(100.f); // volume son 0 à 100
+		m_jumpSound.setPitch(1.f); // aigu (fréquence et durée) 0.5 grave, 2.0 aigu
+		
+// FIN AUDIO
+      }
+
+void character::update(float dt) 
+      {
+// ----- animation saut -----
+		if(m_jumpTimer > 0.f)
+			{
+				m_sprite.setTexture(m_textureW);
+				m_jumpTimer -= dt; 
+				if(m_jumpTimer <= 0.f) 
+					{
+						m_jumpTimer = 0.f;
+					}
+			}
+// ----- fin animation saut -----
+// ----- animation marche -----
+		else if(m_justStartedMoving) 
+			{
+				m_sprite.setTexture(m_textureW);
+				m_animTimer = 0.f;
+				m_useAltFrame = false;
+			} 
+		else if(m_isMoving)
+			{
+				m_animTimer += dt;
+				if(m_animTimer >= 0.20f) // temps de basculement entre 2 sprites
+					{
+						m_animTimer = 0.f;
+						m_useAltFrame = !m_useAltFrame;
+						if(m_useAltFrame) 
+							{
+								m_sprite.setTexture(m_textureW);
+							}
+						else 
+							{
+								m_sprite.setTexture(m_texture);
+							}
+					}
+			}
+		else 
+			{
+				m_sprite.setTexture(m_texture);
+				m_animTimer = 0.f;
+				m_useAltFrame = false;
+			}
+// ----- fin animation marche -----
+
+// ----- physique saut -----
+			m_velocityY += m_gravity * dt;
+			m_sprite.move(0.f, m_velocityY * dt);
+// ----- fin physique saut -----
+	}
+
+void character::move(float dx, float dy) 
+      {
+            m_sprite.move(dx, dy);
+      }
+
+void character::setPosition(float x, float y) 
+	{
+		m_sprite.setPosition(x, y);
+	}
+
+void character::handleInput(float dt)
+	{
+		float speed = 200.f; // pixels/sec
+		bool movingThisFrame = false;
+		
+            if(sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) 
+			{	
+                  	move(-speed * dt, 0.f);
+				m_sprite.setScale(m_size, m_size);
+				movingThisFrame = true;
+			}
+            if(sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
+			{
+                  	move(speed * dt, 0.f);
+				m_sprite.setScale(-m_size, m_size);
+				movingThisFrame = true;
+			}
+		if(sf::Keyboard::isKeyPressed(sf::Keyboard::Up) && m_isOnGround) 
+			{
+				m_velocityY = -400.f;
+				m_isOnGround= false;
+				m_jumpTimer = 0.30f;
+				// audio
+				m_jumpSound.play();
+			}
+		if(movingThisFrame && !m_isMoving) 
+			{
+				m_justStartedMoving = true;
+			}
+		else 
+			{
+				m_justStartedMoving = false;
+			}
+		
+		// mémoriser l'état de la frame i pour la frame i+1
+		m_isMoving = movingThisFrame;
+	}
+
+void character::clampToWindow(const sf::RenderWindow& window) 
+	{
+		sf::FloatRect gb = m_sprite.getGlobalBounds();
+		float halfW = gb.width / 2.0f;
+		float halfH = gb.height / 2.0f;
+
+		float minX = halfW;
+		float maxX = window.getSize().x - halfW;
+		//float minY = halfH; pas besoin de min Y
+		float maxY = window.getSize().y - halfH;
+
+		// variable de la position actuelle du sprite
+		sf::Vector2f pos = m_sprite.getPosition();
+
+		// clamps
+		if(pos.x < minX)
+			pos.x = minX;
+		if(pos.x > maxX)
+			pos.x = maxX;
+
+		if(pos.y > maxY) 
+			{
+				pos.y = maxY;
+				m_velocityY = 0.f; // touche le sol -> stop
+				m_isOnGround = true;
+			}
+		
+		m_sprite.setPosition(pos);
+		
+	}
+
+sf::FloatRect character::getHitbox() const 
+	{
+		sf::Vector2f pos = m_sprite.getPosition();
+		// centrer origine
+		float left = pos.x - m_hitboxSize.x / 2.f + m_hitboxOffset.x; 
+		float top = pos.y - m_hitboxSize.y/ 2.f + m_hitboxOffset.y;
+
+		return {left, top, m_hitboxSize.x, m_hitboxSize.y};
+	}
+void character::drawHitbox(sf::RenderWindow& window, sf::Color color) const 
+	{
+		sf::FloatRect hb = getHitbox();
+		sf::RectangleShape r;
+		r.setPosition(hb.left, hb.top);
+		r.setSize({hb.width, hb.height});
+		r.setFillColor(sf::Color::Transparent);
+		r.setOutlineColor(color);
+		r.setOutlineThickness(1.f);
+		window.draw(r);
+	}
+
+
+void character::draw(sf::RenderWindow& window) 
+      {
+            window.draw(m_sprite);
+      }
+sf::FloatRect character::getBounds() const 
+      {
+            return m_sprite.getGlobalBounds();
+      }
+
+void character::takeDammage(float amount) 
+	{
+		m_pv -= amount;
+		if(m_pv < 0.f)
+			m_pv = 0.f;
+	}
+
+void character::setupHealthBar(const sf::Vector2f& pos, const sf::Vector2f& size) 
+	{
+		m_pvBarPos = pos;
+		m_pvBarSize = size;
+	}
+
+
+void character::drawHealthBar(sf::RenderWindow& window) const
+	{
+		// fond
+		sf::RectangleShape back;
+		back.setPosition(m_pvBarPos);
+		back.setSize(m_pvBarSize);
+		back.setFillColor(m_pvBackColor);
+
+		float ratio = getHealthRatio();
+		if(ratio > 1.f) ratio = 1.f;
+		if(ratio < 1.f) ratio = 0.f;
+
+		// bdv
+		sf::RectangleShape front;
+		front.setPosition(m_pvBarPos);
+		front.setSize(sf::Vector2f(m_pvBarSize.x * ratio, m_pvBarSize.y));
+		front.setFillColor(m_pvFrontColor);
+
+		window.draw(back);
+		window.draw(front);
+		
+	}
+
+menus.hpp :
+#ifndef MENU_HPP
+#define MENU_HPP
+
+#include <SFML/Graphics.hpp>
+#include <iostream>
+
+class Menu
+	{
+		public:
+			Menu(sf::RenderWindow& window);
+			void draw();
+			void update();
+			void handleEvent(const sf::Event& event);
+			bool wantsToStartGame() const;
+			void setStartGameFalse() {m_startGame = false;}
+		private:
+			sf::RenderWindow& m_window;
+			sf::Clock m_blinkClock; // horloge locale
+			sf::Font m_font;
+			sf::Text m_title;
+			sf::Text m_startText;
+			sf::Text m_name;
+			bool m_startGame = false;
+			float m_blinkTimer = 0.f;
+			bool m_blinkState = false;
+	};
+// méthode hors classe
+void drawPauseMenu(sf::RenderWindow& window);
+
+#endif
+menus.cpp:
+#include "menus.hpp"
+
+Menu::Menu(sf::RenderWindow& window)
+	: m_window(window)
+{
+	if(!m_font.loadFromFile("graphismes/regular.ttf")) 
+		{
+			std::cerr << "erreur : police arial.ttf" << std::endl;
+		}
+
+// ----- definition des strings apparaissant sur le menu -----
+	// titre principal
+	m_title.setFont(m_font);
+	m_title.setString("MAKE START");
+	m_title.setCharacterSize(60);
+	m_title.setFillColor(sf::Color::Blue);
+
+	// texte secondaire
+	m_startText.setFont(m_font);
+	m_startText.setString("Press ENTER to start");
+	m_startText.setCharacterSize(20);
+	m_startText.setFillColor(sf::Color::White);
+
+	// mon nom hehe
+	m_name.setFont(m_font);
+	m_name.setString("-------------- Bianchi --------------");
+	m_name.setCharacterSize(10);
+	m_name.setFillColor(sf::Color::White);
+
+	// centrer m_title et m_startText
+	sf::FloatRect textRect = m_title.getLocalBounds();
+	m_title.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
+	m_title.setPosition(window.getSize().x / 2.0f, window.getSize().y / 2.0f);
+	
+	textRect = m_startText.getLocalBounds();
+	m_startText.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
+	m_startText.setPosition(window.getSize().x / 2.0f, window.getSize().y / 2.0f + 70.f);
+
+	textRect = m_name.getLocalBounds();
+	m_name.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
+	m_name.setPosition(window.getSize().x / 2.0f, window.getSize().y / 2.0f + 42.f);
+// ----- fin definition des deux strings apparaissant sur le menu -----
+}
+
+// dessiner et afficher les string : clear puis draw puis display
+void Menu::draw() 
+	{
+		m_window.clear(sf::Color::Black);
+		m_window.draw(m_title);
+		m_window.draw(m_startText);
+		m_window.draw(m_name);
+		m_window.display();
+	}
+
+void Menu::handleEvent(const sf::Event& event) 
+	{
+		if((event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Enter) || (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Space)) 
+			m_startGame = true;
+	}
+
+
+bool Menu::wantsToStartGame() const 
+	{
+		return m_startGame;
+	}
+
+// effet blink
+void Menu::update()
+	{
+		float dt = m_blinkClock.restart().asSeconds();
+		m_blinkTimer += dt;
+		if(m_blinkTimer >= 1.8f) 
+			{
+				m_blinkTimer = 0.f;
+				m_blinkState = !m_blinkState;
+
+				if(m_blinkState)
+					m_startText.setFillColor(sf::Color::Red);
+				else
+					m_startText.setFillColor(sf::Color::White);
+			}
+	}
+
+//menu pause
+
+void drawPauseMenu(sf::RenderWindow& window) 
+	{
+		sf::Text m_pauseText;
+		sf::Font m_font;
+		m_font.loadFromFile("graphismes/regular.ttf");
+		
+		m_pauseText.setFont(m_font);
+		m_pauseText.setString("PAUSE");
+		m_pauseText.setCharacterSize(40);
+		m_pauseText.setFillColor(sf::Color::White);
+		
+		sf::FloatRect textRect = m_pauseText.getLocalBounds(); // après setSize !
+
+		// centrer
+		m_pauseText.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
+		m_pauseText.setPosition(window.getSize().x / 2.0f, window.getSize().y / 2.0f);
+
+		// overlay
+		sf::RectangleShape overlay;
+		overlay.setSize(sf::Vector2f(window.getSize().x, window.getSize().y));
+		overlay.setFillColor(sf::Color(0, 0, 0, 120)); // transparence
+
+		window.draw(overlay);
+		window.draw(m_pauseText);
+	}

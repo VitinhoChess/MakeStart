@@ -1,0 +1,15 @@
+---------------TO DO LIST---------------
+Liste de fonctions à implementer dans le code source du Jeu :
+
+* : facultatif, ** : intéressant, *** : important
+1 : passer à 3 frames d'animation pour crocodilo et tralalero : **
+2 : ajouter un sprite de saut != sprite de marche (paul suggest) : *
+3 : ajuster la taille des sprites en fonction de la taille de la fênetre : ***
+4 : améliorer le menu : **
+5 : corriger sprite tralalero (imparfait) : **
+6 
+: ameliorer oscillations crocodilo : **
+7 : ajouter musique au menu : **
+8 : bug crocodilo : ***
+9 : ajouter animation 2/3 frames missile : *
+10 : améliorer la barre de vie : **
